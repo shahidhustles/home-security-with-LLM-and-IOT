@@ -99,13 +99,13 @@
 // ============================================================================
 
 // WiFi Configuration
-const char* WIFI_SSID = "YOUR_WIFI_SSID";           // Change this
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";   // Change this
+const char* WIFI_SSID = "VivoY73";           // Change this
+const char* WIFI_PASSWORD = "12345678";   // Change this
 const unsigned long WIFI_TIMEOUT = 15000;           // 15 seconds timeout
 
 // PIN Configuration
 // These should match your hardware setup
-const int SOLENOID_LOCK_PIN = 13;      // GPIO pin for lock (HIGH = locked, LOW = unlocked)
+const int SOLENOID_LOCK_PIN = 15;      // GPIO pin for lock (HIGH = locked, LOW = unlocked)
 const int PIR_SENSOR_PIN = 12;         // GPIO pin for PIR motion sensor
 const int STATUS_LED_PIN = 2;          // GPIO pin for status indicator (optional)
 
@@ -119,7 +119,7 @@ bool motion_currently_detected = false;            // Current motion state
 AsyncWebServer server(80);
 const int SERVER_PORT = 80;
 
-// ============================================================================
+// ===========================================a================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
@@ -224,7 +224,7 @@ void updateMotionSensor() {
   POST /api/lock
   Lock the door via solenoid
 */
-void handleLock(AsyncWebServerRequest* request, JsonVariant& json) {
+void handleLock(AsyncWebServerRequest* request) {
   Serial.println("[API] POST /api/lock called");
   
   door_locked = true;
@@ -248,7 +248,7 @@ void handleLock(AsyncWebServerRequest* request, JsonVariant& json) {
   POST /api/unlock
   Unlock the door via solenoid
 */
-void handleUnlock(AsyncWebServerRequest* request, JsonVariant& json) {
+void handleUnlock(AsyncWebServerRequest* request) {
   Serial.println("[API] POST /api/unlock called");
   
   door_locked = false;
@@ -418,38 +418,34 @@ void setup() {
   Serial.println("[Boot] Setting up API endpoints...");
   
   // DOOR CONTROL ENDPOINTS
-  server.post("/api/lock", [](AsyncWebServerRequest* request) {
-    if (request->hasParam("_raw", true)) {
-      handleLock(request, JsonVariant());
-    } else {
-      handleLock(request, JsonVariant());
-    }
+  server.on("/api/lock", HTTP_POST, [](AsyncWebServerRequest* request) {
+    handleLock(request);
   });
   
-  server.post("/api/unlock", [](AsyncWebServerRequest* request) {
-    handleUnlock(request, JsonVariant());
+  server.on("/api/unlock", HTTP_POST, [](AsyncWebServerRequest* request) {
+    handleUnlock(request);
   });
   
-  server.get("/api/door/status", [](AsyncWebServerRequest* request) {
+  server.on("/api/door/status", HTTP_GET, [](AsyncWebServerRequest* request) {
     handleDoorStatus(request);
   });
   
   // MOTION SENSOR ENDPOINTS
-  server.get("/api/motion", [](AsyncWebServerRequest* request) {
+  server.on("/api/motion", HTTP_GET, [](AsyncWebServerRequest* request) {
     handleMotionStatus(request);
   });
   
   // CAMERA ENDPOINTS
-  server.get("/api/snapshot", [](AsyncWebServerRequest* request) {
+  server.on("/api/snapshot", HTTP_GET, [](AsyncWebServerRequest* request) {
     handleSnapshot(request);
   });
   
   // TEST/UTILITY ENDPOINTS
-  server.post("/api/trigger_motion", [](AsyncWebServerRequest* request) {
+  server.on("/api/trigger_motion", HTTP_POST, [](AsyncWebServerRequest* request) {
     handleTriggerMotion(request);
   });
   
-  server.get("/api/health", [](AsyncWebServerRequest* request) {
+  server.on("/api/health", HTTP_GET, [](AsyncWebServerRequest* request) {
     handleHealth(request);
   });
   
