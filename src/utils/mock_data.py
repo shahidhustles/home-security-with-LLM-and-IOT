@@ -55,10 +55,13 @@ def get_mock_motion_status() -> Dict[str, Any]:
 
 
 def get_mock_camera_snapshot() -> Dict[str, Any]:
-    """Get mock camera snapshot."""
+    """Get mock camera snapshot with AI description."""
     return {
         "status": "ok",
-        "url": "http://192.168.1.100/snapshot.jpg",
+        "image_url": "https://gofile.io/d/mock_snapshot",
+        "view_image_here": "📷 Click to view: https://gofile.io/d/mock_snapshot",
+        "ai_description": "[MOCK] The camera shows a well-lit living room. No people detected. A couch is visible in the center of the frame with a coffee table in front. Natural light coming from the left side suggests a window. No suspicious activity or motion detected. The room appears secure.",
+        "image_size": 45000,
         "timestamp": int(time.time()),
         "mock": True,
     }

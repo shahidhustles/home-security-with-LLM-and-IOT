@@ -32,11 +32,13 @@
      - ArduinoJson (for JSON handling)
      - AsyncTCP
      - ESPAsyncWebServer
+     - esp32-camera (for ESP32-CAM support)
      
      Go to Sketch -> Include Library -> Manage Libraries and search for:
      - "ArduinoJson" by Benoit Blanchon
      - "AsyncTCP" by Me-No-Dev
      - "ESPAsyncWebServer" by Me-No-Dev
+     - "esp32-camera" by espressif
   
   3. Configure PIN assignments (see CONFIGURATION section below)
   
@@ -80,11 +82,9 @@
     }
   
   GET /api/snapshot
-    Response: {
-      "status": "ok",
-      "url": "http://<esp32_ip>:80/fs/jpg/last.jpg",
-      "timestamp": 1234567890
-    }
+    Response: Binary JPEG image data (image/jpeg)
+    Returns raw JPEG image from ESP32-CAM camera
+    Timestamp available in response headers or can be logged separately
   
   ============================================================================
 */
@@ -93,6 +93,8 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include "esp_camera.h"
+#include "SPIFFS.h"
 
 // ============================================================================
 // CONFIGURATION SECTION - UPDATE THESE VALUES
@@ -107,7 +109,26 @@ const unsigned long WIFI_TIMEOUT = 15000;           // 15 seconds timeout
 // These should match your hardware setup
 const int SOLENOID_LOCK_PIN = 15;      // GPIO pin for lock (HIGH = locked, LOW = unlocked)
 const int PIR_SENSOR_PIN = 12;         // GPIO pin for PIR motion sensor
-const int STATUS_LED_PIN = 2;          // GPIO pin for status indicator (optional)
+const int STATUS_LED_PIN = 33;          // GPIO pin for status indicator (optional)
+
+// ESP32-CAM Pin Configuration (OV2640)
+// DO NOT CHANGE - These are hardwired for ESP32-CAM module
+#define PWDN_GPIO_NUM     32
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM      0
+#define SIOD_GPIO_NUM     26
+#define SIOC_GPIO_NUM     27
+#define Y9_GPIO_NUM       35
+#define Y8_GPIO_NUM       34
+#define Y7_GPIO_NUM       39
+#define Y6_GPIO_NUM       36
+#define Y5_GPIO_NUM       21
+#define Y4_GPIO_NUM       19
+#define Y3_GPIO_NUM       18
+#define Y2_GPIO_NUM        5
+#define VSYNC_GPIO_NUM    25
+#define HREF_GPIO_NUM     23
+#define PCLK_GPIO_NUM     22
 
 // Device State (Hardcoded data for demo - update as needed)
 // In production, you might store this in EEPROM or database
@@ -214,6 +235,68 @@ void updateMotionSensor() {
     digitalWrite(STATUS_LED_PIN, LOW);   // Turn off LED
     Serial.println("[Motion] Motion stopped");
   }
+}
+
+// Initialize ESP32-CAM
+bool initCamera() {
+  Serial.println("[Camera] Initializing ESP32-CAM...");
+  
+  camera_config_t config;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.pin_d0 = Y2_GPIO_NUM;
+  config.pin_d1 = Y3_GPIO_NUM;
+  config.pin_d2 = Y4_GPIO_NUM;
+  config.pin_d3 = Y5_GPIO_NUM;
+  config.pin_d4 = Y6_GPIO_NUM;
+  config.pin_d5 = Y7_GPIO_NUM;
+  config.pin_d6 = Y8_GPIO_NUM;
+  config.pin_d7 = Y9_GPIO_NUM;
+  config.pin_xclk = XCLK_GPIO_NUM;
+  config.pin_pclk = PCLK_GPIO_NUM;
+  config.pin_vsync = VSYNC_GPIO_NUM;
+  config.pin_href = HREF_GPIO_NUM;
+  config.pin_sscb_sda = SIOD_GPIO_NUM;
+  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_pwdn = PWDN_GPIO_NUM;
+  config.pin_reset = RESET_GPIO_NUM;
+  config.xclk_freq_hz = 20000000;
+  config.pixel_format = PIXFORMAT_JPEG;
+  
+  // Image quality settings
+  config.jpeg_quality = 10;  // 0-63, lower number = higher quality
+  config.fb_count = 2;       // Frame buffer count
+  config.grab_mode = CAMERA_GRAB_LATEST;
+  
+  // Frame size
+  config.frame_size = FRAMESIZE_VGA;  // 640x480
+  
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+    Serial.printf("[Camera] Camera init failed with error 0x%x\n", err);
+    return false;
+  }
+  
+  // Camera settings
+  sensor_t * s = esp_camera_sensor_get();
+  s->set_brightness(s, 0);     // brightness (-2 to 2)
+  s->set_contrast(s, 0);       // contrast (-2 to 2)
+  s->set_saturation(s, 0);     // saturation (-2 to 2)
+  s->set_special_effect(s, 0); // special effect (0 = none)
+  s->set_awb_gain(s, 1);       // auto white balance (0 or 1)
+  s->set_wb_mode(s, 0);        // white balance (0-4)
+  s->set_exposure_ctrl(s, 1);  // exposure control (0 or 1)
+  s->set_aec_value(s, 300);    // auto exposure value (0-1200)
+  s->set_gain_ctrl(s, 1);      // gain control (0 or 1)
+  s->set_agc_gain(s, 0);       // auto gain (0-30)
+  s->set_gainceiling(s, (gainceiling_t)0);  // gain ceiling (0-6)
+  s->set_bpc(s, 0);            // black pixel correction (0 or 1)
+  s->set_wpc(s, 1);            // white pixel correction (0 or 1)
+  s->set_raw_gma(s, 1);        // raw gamma (0 or 1)
+  s->set_lenc(s, 1);           // lens correction (0 or 1)
+  
+  Serial.println("[Camera] Camera initialized successfully!");
+  return true;
 }
 
 // ============================================================================
@@ -330,20 +413,37 @@ void handleMotionStatus(AsyncWebServerRequest* request) {
 void handleSnapshot(AsyncWebServerRequest* request) {
   Serial.println("[API] GET /api/snapshot called");
   
-  // Get local IP for snapshot URL
-  String ip = WiFi.localIP().toString();
-  String snapshot_url = "http://" + ip + ":80/fs/jpg/last.jpg";
+  // Capture frame from camera
+  camera_fb_t * fb = esp_camera_fb_get();
   
-  StaticJsonDocument<256> response;
-  response["status"] = "ok";
-  response["url"] = snapshot_url;
-  response["timestamp"] = getTimestamp();
+  if (!fb) {
+    Serial.println("[API] Camera capture failed");
+    
+    StaticJsonDocument<256> response;
+    response["status"] = "error";
+    response["message"] = "Failed to capture frame from camera";
+    response["timestamp"] = getTimestamp();
+    
+    String jsonResponse;
+    serializeJson(response, jsonResponse);
+    
+    request->send(500, "application/json", jsonResponse);
+    return;
+  }
   
-  String jsonResponse;
-  serializeJson(response, jsonResponse);
+  // Create data URL or send image directly
+  // Option 1: Send image as base64 in JSON
+  // Option 2: Send raw JPEG
+  // Using Option 2 - send raw JPEG data
   
-  request->send(200, "application/json", jsonResponse);
-  Serial.println("[API] Snapshot URL provided");
+  Serial.printf("[API] Captured frame: %d bytes\n", fb->len);
+  
+  request->send_P(200, "image/jpeg", (const uint8_t *)fb->buf, fb->len);
+  
+  // Return frame buffer
+  esp_camera_fb_return(fb);
+  
+  Serial.println("[API] Snapshot sent successfully");
 }
 
 /*
@@ -408,6 +508,12 @@ void setup() {
   if (!connectToWiFi()) {
     Serial.println("[Boot] WiFi connection failed! Check credentials.");
     // Continue anyway for now, or implement retry logic
+  }
+  
+  // Initialize camera
+  if (!initCamera()) {
+    Serial.println("[Boot] Camera initialization failed!");
+    // Continue with other functionality
   }
   
   // Configure time (for timestamps)

@@ -18,6 +18,12 @@ class Config:
     # Mock Mode
     MOCK_MODE: bool = os.getenv("MOCK_MODE", "true").lower() == "true"
 
+    # Imgur Configuration (legacy)
+    IMGUR_CLIENT_ID: str = os.getenv("IMGUR_CLIENT_ID", "")
+
+    # Gemini API Configuration
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 

@@ -57,7 +57,15 @@ mcp = FastMCP(
     instructions="""You are a smart home security assistant. You have access to tools 
 that control and monitor door locks, motion sensors, and cameras. Help the user 
 manage their security by answering queries about device status and executing control 
-commands. Support natural language queries in any language (you handle the translation).""",
+commands. Support natural language queries in any language (you handle the translation).
+
+CRITICAL for camera snapshots:
+- When capturing a snapshot, you MUST include the image URL in your response
+- Use the "view_image_here" or "image_url" field from the response
+- Always display the full URL so the user can click/copy it: https://gofile.io/d/xxxxx
+- Example response: "Here's your snapshot: https://gofile.io/d/abc123"
+- NEVER skip the URL - users need it to view the image
+- If upload fails (image_url is null), tell the user the upload failed""",
 )
 
 
@@ -168,15 +176,21 @@ async def get_motion_status_tool() -> dict:
 
 @mcp.tool()
 async def get_camera_snapshot_tool() -> dict:
-    """Capture current camera image.
+    """Capture current camera image from ESP32-CAM.
 
-    Get a snapshot from ESP32-CAM. The image is saved on the ESP32 and
-    accessible via the returned URL.
+    Get a snapshot from the security camera. Returns both:
+    - A public URL for the user to view the image
+    - Base64 encoded image data for AI analysis
+
+    IMPORTANT: Always include the image_url in your response so users can view it!
+    Format as: "📷 View snapshot: <image_url>"
 
     Returns:
         Dictionary with:
             - status: "ok" if successful, "error" if failed
-            - url: HTTP URL to access the snapshot image
+            - image_url: Public URL to view the snapshot (ALWAYS include this in response!)
+            - image_base64: Base64 encoded JPEG for AI to analyze
+            - image_size: Size in bytes
             - timestamp: Unix timestamp of snapshot capture
             - message: Human-readable status message (if error)
     """
