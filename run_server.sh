@@ -1,3 +1,4 @@
 #!/bin/bash
-source /Users/shahidpatel/cps/ldam-cp/.venv/bin/activate
-python /Users/shahidpatel/cps/ldam-cp/src/server.py
+cd /Users/shahidpatel/cps/iot
+source /Users/shahidpatel/cps/iot/.venv/bin/activate
+exec python3 /Users/shahidpatel/cps/iot/src/server.py

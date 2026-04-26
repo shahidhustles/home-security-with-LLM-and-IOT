@@ -107,7 +107,7 @@ const unsigned long WIFI_TIMEOUT = 15000;           // 15 seconds timeout
 
 // PIN Configuration
 // These should match your hardware setup
-const int SOLENOID_LOCK_PIN = 15;      // GPIO pin for lock (HIGH = locked, LOW = unlocked)
+const int SOLENOID_LOCK_PIN = 13;      // GPIO pin for lock (HIGH = locked, LOW = unlocked)
 const int PIR_SENSOR_PIN = 12;         // GPIO pin for PIR motion sensor
 const int STATUS_LED_PIN = 33;          // GPIO pin for status indicator (optional)
 
